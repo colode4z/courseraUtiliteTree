@@ -2,13 +2,14 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
-	"unicode/utf8"
+	"strconv"
 )
 
-func dirTree(out *os.File, path string, printFiles bool) error {
+func dirTree(output io.Writer, path string, printFiles bool) error {
 	if err := os.Chdir(path); err != nil {
 		return fmt.Errorf("error - directory does not exist")
 	}
@@ -20,30 +21,36 @@ func dirTree(out *os.File, path string, printFiles bool) error {
 
 	currPath, _ := os.Getwd()
 	tempFile := ""
+	var tempSize int64
 	for _, f := range files {
 		if tempFile != "" {
-			printDirFiles(tempFile, "├───")
+			printDirFiles(output, tempFile, "├───", tempSize)
 			os.Chdir(currPath)
 		}
 
 		tempFile = f.Name()
+		tempSize = f.Size()
 	}
-	printDirFiles(tempFile, "└───")
+	printDirFiles(output, tempFile, "└───", tempSize)
 
 	return nil
 }
 
-func printDirFiles(dir string, tab string) {
-	fmt.Println(tab + dir)
-
+func printDirFiles(output io.Writer, dir string, tab string, size int64) {
 	if err := os.Chdir(dir); err != nil {
+		if size == 0 {
+			fmt.Fprintln(output, tab+dir+" (empty)")
+		} else {
+			fmt.Fprintln(output, tab+dir+" ("+strconv.FormatInt(size, 10)+"b)")
+		}
 		return
 	}
+	fmt.Fprintln(output, tab+dir)
 
-	if tab[utf8.RuneCountInString(tab)-utf8.RuneCountInString("└───"):] == "└───" && utf8.RuneCountInString(tab)-utf8.RuneCountInString("└───") != 0 {
-		tab = tab[:utf8.RuneCountInString(tab)-utf8.RuneCountInString("└───")] + " \t" + "└───"
-	} else if tab[utf8.RuneCountInString(tab)-utf8.RuneCountInString("└───"):] != "└───" {
-		tab = "|\t" + tab
+	if tab[len(tab)-len("└───"):] == "└───" && len(tab)-len("└───") != 0 {
+		tab = tab[:len(tab)-len("└───")] + " \t" + "├───"
+	} else if tab[len(tab)-len("└───"):] != "└───" {
+		tab = "│\t" + tab
 	}
 
 	files, err := ioutil.ReadDir("./")
@@ -53,19 +60,23 @@ func printDirFiles(dir string, tab string) {
 
 	currPath, _ := os.Getwd()
 	tempFile := ""
+	var tempSize int64
 	for _, f := range files {
 		if tempFile != "" {
-			printDirFiles(tempFile, tab)
+			printDirFiles(output, tempFile, tab, tempSize)
 			os.Chdir(currPath)
 		}
 
 		tempFile = f.Name()
+		tempSize = f.Size()
 	}
-	printDirFiles(tempFile, tab[:utf8.RuneCountInString(tab)-utf8.RuneCountInString("└───")]+"└───")
+
+	printDirFiles(output, tempFile, tab[:len(tab)-len("└───")]+"└───", tempSize)
 }
 
 func main() {
 	out := os.Stdout
+
 	if !(len(os.Args) == 2 || len(os.Args) == 3) {
 		panic("usage go run main.go . [-f]")
 	}
